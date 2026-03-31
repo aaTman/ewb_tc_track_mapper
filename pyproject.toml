@@ -1,0 +1,13 @@
+[project]
+name = "ewb-tc-track-mapper"
+version = "0.1.0"
+description = "Interactive TC track and landfall viewer"
+requires-python = ">=3.11"
+dependencies = [
+    "extremeweatherbench",
+    "panel>=1.4",
+    "folium>=0.17",
+]
+
+[tool.uv.sources]
+extremeweatherbench = { path = "/home/taylor/code/ExtremeWeatherBench", editable = true }
