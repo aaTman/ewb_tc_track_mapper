@@ -1,7 +1,7 @@
 [project]
 name = "ewb-tc-track-mapper"
 version = "0.1.0"
-description = "Interactive TC track and landfall viewer"
+description = "Interactive TC track and landfall viewer (requires EWB develop branch)"
 requires-python = ">=3.11"
 dependencies = [
     "extremeweatherbench",
