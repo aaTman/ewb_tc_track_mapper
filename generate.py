@@ -261,6 +261,13 @@ def generate(
     fc_slp_da = forecast_ds["air_pressure_at_mean_sea_level"]
     obs_slp_da = target_ds["air_pressure_at_mean_sea_level"]
 
+    # EWB's land mask uses ±180 longitudes; normalize forecast coords so
+    # find_landfalls doesn't detect false coastline crossings for models
+    # (e.g. CIRA) that store longitudes in 0–360 convention.
+    if "longitude" in fc_slp_da.coords:
+        norm_lons = ((fc_slp_da.longitude.values + 180) % 360) - 180
+        fc_slp_da = fc_slp_da.assign_coords(longitude=norm_lons)
+
     logger.info("Finding forecast landfalls...")
     try:
         fc_landfalls = calc.find_landfalls(fc_slp_da)

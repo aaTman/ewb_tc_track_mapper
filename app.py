@@ -45,12 +45,17 @@ def _nc_path(case_id: int, model: str) -> pathlib.Path:
 
 # ── map builder ───────────────────────────────────────────────────────────────
 
+def _norm_lon(lons):
+    """Convert any longitude array to ±180 convention."""
+    return ((np.asarray(lons) + 180) % 360) - 180
+
+
 def _build_map(nc_path: pathlib.Path) -> str:
     """Read a generated netcdf and return Folium map HTML string."""
     ds = xr.open_dataset(nc_path, decode_timedelta=False)
 
     center_lat = float(np.nanmean(ds["observed_lat"].values))
-    center_lon = float(np.nanmean(ds["observed_lon"].values))
+    center_lon = float(np.nanmean(_norm_lon(ds["observed_lon"].values)))
 
     m = folium.Map(
         location=[center_lat, center_lon],
@@ -64,7 +69,7 @@ def _build_map(nc_path: pathlib.Path) -> str:
 
     # ── observed track ────────────────────────────────────────────────────
     obs_lats = ds["observed_lat"].values
-    obs_lons = ds["observed_lon"].values
+    obs_lons = _norm_lon(ds["observed_lon"].values)
     valid = ~(np.isnan(obs_lats) | np.isnan(obs_lons))
     obs_coords = list(zip(obs_lats[valid].tolist(), obs_lons[valid].tolist()))
     if obs_coords:
@@ -92,6 +97,7 @@ def _build_map(nc_path: pathlib.Path) -> str:
                     radius=8,
                     color="black",
                     fill=True,
+                    fill_color="black",
                     fill_opacity=0.9,
                     tooltip="Observed landfall",
                 ).add_to(m)
@@ -105,7 +111,7 @@ def _build_map(nc_path: pathlib.Path) -> str:
             colour = matplotlib.colors.to_hex(rgba)
             mask = ds["detection_init_time"].values == init_t
             fc_lats = ds["detection_lat"].values[mask]
-            fc_lons = ds["detection_lon"].values[mask]
+            fc_lons = _norm_lon(ds["detection_lon"].values[mask])
             fc_valid = ~(np.isnan(fc_lats) | np.isnan(fc_lons))
             coords = list(
                 zip(fc_lats[fc_valid].tolist(), fc_lons[fc_valid].tolist())
@@ -132,6 +138,7 @@ def _build_map(nc_path: pathlib.Path) -> str:
                     radius=6,
                     color="red",
                     fill=True,
+                    fill_color="red",
                     fill_opacity=0.8,
                     tooltip="Forecast landfall",
                 ).add_to(m)
