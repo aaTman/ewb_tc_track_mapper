@@ -265,8 +265,11 @@ def generate(
     # find_landfalls doesn't detect false coastline crossings for models
     # (e.g. CIRA) that store longitudes in 0–360 convention.
     if "longitude" in fc_slp_da.coords:
-        norm_lons = ((fc_slp_da.longitude.values + 180) % 360) - 180
-        fc_slp_da = fc_slp_da.assign_coords(longitude=norm_lons)
+        lon_var = fc_slp_da.coords["longitude"]
+        norm_lons = ((lon_var.values + 180) % 360) - 180
+        fc_slp_da = fc_slp_da.assign_coords(
+            longitude=(lon_var.dims, norm_lons)
+        )
 
     logger.info("Finding forecast landfalls...")
     try:
@@ -338,9 +341,12 @@ def main() -> None:
     )
     p.add_argument(
         "--model",
-        required=True,
-        choices=ALL_MODELS,
-        help="Forecast model name",
+        default=None,
+        choices=[*ALL_MODELS, "all"],
+        help=(
+            "Forecast model name, 'all' to run every model, "
+            "or omit to run every model (same as 'all')"
+        ),
     )
     p.add_argument(
         "--output-dir",
@@ -370,12 +376,20 @@ def main() -> None:
             )
         return
 
-    out = generate(
-        case_id=args.case_id,
-        model_name=args.model,
-        output_dir=args.output_dir,
-    )
-    print(f"Output: {out}")
+    run_models = ALL_MODELS if (args.model is None or args.model == "all") \
+        else [args.model]
+
+    for model in run_models:
+        logger.info("Running %s for case %s", model, args.case_id)
+        try:
+            out = generate(
+                case_id=args.case_id,
+                model_name=model,
+                output_dir=args.output_dir,
+            )
+            print(f"Output: {out}")
+        except Exception as exc:
+            logger.error("Failed %s / case %s: %s", model, args.case_id, exc)
 
 
 if __name__ == "__main__":
