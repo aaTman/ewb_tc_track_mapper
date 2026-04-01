@@ -8,6 +8,8 @@ import pathlib
 import threading
 
 import folium
+import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import panel as pn
 import xarray as xr
@@ -42,12 +44,6 @@ def _nc_path(case_id: int, model: str) -> pathlib.Path:
 
 
 # ── map builder ───────────────────────────────────────────────────────────────
-
-_TRACK_COLORS = [
-    "#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4",
-    "#42d4f4", "#f032e6", "#bfef45", "#fabed4", "#469990",
-]
-
 
 def _build_map(nc_path: pathlib.Path) -> str:
     """Read a generated netcdf and return Folium map HTML string."""
@@ -103,8 +99,10 @@ def _build_map(nc_path: pathlib.Path) -> str:
     # ── forecast tracks (one colour per unique init_time) ─────────────────
     if "detection_init_time" in ds:
         init_times = np.unique(ds["detection_init_time"].values)
+        cmap = plt.get_cmap("rainbow", max(len(init_times), 1))
         for i, init_t in enumerate(init_times):
-            colour = _TRACK_COLORS[i % len(_TRACK_COLORS)]
+            rgba = cmap(i / max(len(init_times) - 1, 1))
+            colour = matplotlib.colors.to_hex(rgba)
             mask = ds["detection_init_time"].values == init_t
             fc_lats = ds["detection_lat"].values[mask]
             fc_lons = ds["detection_lon"].values[mask]

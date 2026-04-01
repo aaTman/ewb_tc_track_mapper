@@ -5,6 +5,8 @@ description = "Interactive TC track and landfall viewer"
 requires-python = ">=3.11"
 dependencies = [
     "extremeweatherbench",
+    "joblib",
+    "matplotlib",
     "panel>=1.4",
     "folium>=0.17",
 ]
