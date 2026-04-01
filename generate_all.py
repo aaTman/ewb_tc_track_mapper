@@ -10,6 +10,7 @@ Usage:
 import argparse
 import logging
 import pathlib
+import time
 import traceback
 
 from joblib import Parallel, delayed
@@ -26,30 +27,55 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+_RETRYABLE = ("timeout", "timed out", "connect", "connection", "icechunkerror")
+
+
+def _is_retryable(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return any(k in msg for k in _RETRYABLE)
+
+
 def _safe_generate(
     case_id: int,
     model: str,
     output_dir: pathlib.Path,
     skip_existing: bool,
+    retries: int = 3,
+    retry_delay: float = 10.0,
 ) -> dict:
     """Wrapper around generate() that catches exceptions so one failure
-    doesn't abort the whole batch."""
+    doesn't abort the whole batch. Retries on transient network errors."""
     out_path = output_dir / model / f"case_{case_id:03d}.nc"
     if skip_existing and out_path.exists():
         logger.info("Skipping %s / case %d (already exists)", model, case_id)
         return {"case_id": case_id, "model": model, "status": "skipped"}
-    try:
-        generate(case_id=case_id, model_name=model, output_dir=output_dir)
-        return {"case_id": case_id, "model": model, "status": "ok"}
-    except Exception as exc:
-        logger.error(
-            "FAILED case %d / %s: %s\n%s",
-            case_id,
-            model,
-            exc,
-            traceback.format_exc(),
-        )
-        return {"case_id": case_id, "model": model, "status": "error", "error": str(exc)}
+
+    last_exc = None
+    for attempt in range(1, retries + 1):
+        try:
+            generate(case_id=case_id, model_name=model, output_dir=output_dir)
+            return {"case_id": case_id, "model": model, "status": "ok"}
+        except Exception as exc:
+            last_exc = exc
+            if _is_retryable(exc) and attempt < retries:
+                wait = retry_delay * attempt
+                logger.warning(
+                    "Network error on case %d / %s (attempt %d/%d), "
+                    "retrying in %.0fs: %s",
+                    case_id, model, attempt, retries, wait, exc,
+                )
+                time.sleep(wait)
+            else:
+                break
+
+    logger.error(
+        "FAILED case %d / %s: %s\n%s",
+        case_id,
+        model,
+        last_exc,
+        traceback.format_exc(),
+    )
+    return {"case_id": case_id, "model": model, "status": "error", "error": str(last_exc)}
 
 
 def main() -> None:
@@ -81,8 +107,21 @@ def main() -> None:
     p.add_argument(
         "--workers",
         type=int,
-        default=-1,
-        help="Number of parallel workers (-1 = all CPUs, default: -1)",
+        default=8,
+        help="Number of parallel workers (default: 8; use -1 for all CPUs)",
+    )
+    p.add_argument(
+        "--retries",
+        type=int,
+        default=3,
+        help="Retries on transient network errors (default: 3)",
+    )
+    p.add_argument(
+        "--retry-delay",
+        type=float,
+        default=10.0,
+        help="Base delay in seconds between retries, multiplied by attempt "
+             "number (default: 10)",
     )
     p.add_argument(
         "--skip-existing",
@@ -117,7 +156,10 @@ def main() -> None:
     )
 
     results = Parallel(n_jobs=args.workers, backend="loky", verbose=10)(
-        delayed(_safe_generate)(case_id, model, args.output_dir, args.skip_existing)
+        delayed(_safe_generate)(
+            case_id, model, args.output_dir, args.skip_existing,
+            args.retries, args.retry_delay,
+        )
         for case_id, model in jobs
     )
 
